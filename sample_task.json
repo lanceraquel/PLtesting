@@ -1,0 +1,12 @@
+{
+  "target_industry": "mid-market and enterprise technology buyers",
+  "target_geography": "Southeast Asia",
+  "si_keywords": ["ERP", "CRM", "cloud migration", "cybersecurity", "AI automation"],
+  "exclusion_keywords": ["staffing only", "recruitment agency"],
+  "company_size_preference": "mid-market or enterprise",
+  "service_categories": ["ERP", "CRM", "cloud migration", "cybersecurity", "AI automation"],
+  "max_results": 100,
+  "freshness_days": 365,
+  "output_format": "markdown"
+}
+
