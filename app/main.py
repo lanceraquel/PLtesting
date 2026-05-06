@@ -9,6 +9,13 @@ from app.logging_config import configure_logging
 configure_logging()
 
 app = FastAPI(
+    @app.get("/")
+def read_root():
+    return {
+        "message": "SI Research Agent API",
+        "status": "running",
+        "version": "0.1.0"
+    }
     title="SI Research Agent",
     description="Cloud-deployable Systems Integrator lead research API.",
     version="0.1.0",
