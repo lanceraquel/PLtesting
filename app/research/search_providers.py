@@ -1,9 +1,14 @@
+import logging
+import re
 from dataclasses import dataclass
 from typing import Protocol
-import re
 from urllib.parse import quote_plus
 
+import httpx
+
 from app.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -57,5 +62,62 @@ class StarterSearchProvider:
         return results
 
 
+class SerpApiSearchProvider:
+    """Search provider backed by SerpAPI Google Search.
+
+    SerpAPI credentials must be supplied through SEARCH_API_KEY. The key is
+    never logged or persisted. See https://serpapi.com/search-api for params.
+    """
+
+    endpoint = "https://serpapi.com/search.json"
+
+    def __init__(self, settings: Settings) -> None:
+        if not settings.search_api_key:
+            raise ValueError("SEARCH_API_KEY is required for SerpAPI")
+        self.settings = settings
+
+    def search(self, query: str, max_results: int) -> list[SearchResult]:
+        limit = max(1, min(max_results, 10))
+        params = {
+            "engine": "google",
+            "q": query,
+            "api_key": self.settings.search_api_key,
+            "num": limit,
+        }
+        headers = {"User-Agent": self.settings.user_agent}
+        try:
+            response = httpx.get(self.endpoint, params=params, headers=headers, timeout=30.0)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("SerpAPI request failed for query %r: %s", query, exc)
+            raise RuntimeError("SerpAPI request failed; verify SEARCH_API_KEY and account quota") from exc
+
+        payload = response.json()
+        if "error" in payload:
+            raise RuntimeError(f"SerpAPI returned an error: {payload['error']}")
+
+        organic_results = payload.get("organic_results") or []
+        results: list[SearchResult] = []
+        for item in organic_results[:limit]:
+            url = item.get("link")
+            title = item.get("title")
+            snippet = item.get("snippet") or ""
+            if not snippet and item.get("snippet_highlighted_words"):
+                snippet = " ".join(str(word) for word in item["snippet_highlighted_words"])
+            if not url or not title:
+                continue
+            results.append(
+                SearchResult(
+                    title=title,
+                    url=url,
+                    snippet=snippet,
+                    query=query,
+                )
+            )
+        return results
+
+
 def get_search_provider(settings: Settings) -> SearchProvider:
+    if settings.search_api_key:
+        return SerpApiSearchProvider(settings)
     return StarterSearchProvider(settings)

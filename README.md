@@ -2,7 +2,7 @@
 
 Cloud-deployable FastAPI and worker application for researching Systems Integrator leads, persisting them in PostgreSQL, deduplicating companies, scoring relevance, and exporting reviewable reports.
 
-The starter search provider is intentionally replaceable. It produces deterministic evidence records so the API, worker, database, reports, and Railway deployment can be tested immediately. For production web research, plug an official search API into `app/research/search_providers.py` and provide credentials through environment variables.
+The app uses SerpAPI for live web search when `SEARCH_API_KEY` is configured. If no key is present, it falls back to a deterministic starter provider so the API, worker, database, reports, and Railway deployment can still be tested.
 
 ## Features
 
@@ -49,7 +49,7 @@ DEFAULT_MAX_RESULTS=25
 REPORT_OUTPUT_DIR=reports
 ```
 
-`OPENAI_API_KEY` is reserved for future LLM summarization or scoring. `SEARCH_API_KEY` is reserved for a compliant search provider such as Bing Web Search, SerpAPI, or Google Programmable Search. No secrets are committed.
+`OPENAI_API_KEY` is reserved for future LLM summarization or scoring. `SEARCH_API_KEY` should be your SerpAPI private key. No secrets are committed.
 
 ## Local Run
 
@@ -137,7 +137,14 @@ Railway cron jobs should start, process pending work, and exit. The always-on wo
 
 ## Production Search Provider
 
-The placeholder provider lives in `app/research/search_providers.py`. Replace `StarterSearchProvider` or update `get_search_provider()` to use an official web search API. Keep these constraints:
+The live provider lives in `app/research/search_providers.py` and uses SerpAPI when `SEARCH_API_KEY` is present. Configure it in Railway on both the `api` and `worker` services:
+
+```bash
+railway variable set --service api SEARCH_API_KEY=your_serpapi_key
+railway variable set --service worker SEARCH_API_KEY=your_serpapi_key
+```
+
+Keep these constraints for future provider changes:
 
 - Read API keys only from environment variables.
 - Respect robots.txt and API terms.
@@ -168,4 +175,3 @@ pytest
 ```
 
 The test suite uses SQLite for speed. Railway and production deployments should use PostgreSQL.
-
