@@ -75,6 +75,7 @@ def _upsert_company(session: Session, lead: ExtractedLead) -> Company:
 def run_research_task(session: Session, task: ResearchTask, provider: SearchProvider | None = None) -> ResearchTask:
     settings = get_settings()
     provider = provider or get_search_provider(settings)
+    task_id = task.id
     task.status = TaskStatus.running.value
     task.locked_at = datetime.now(UTC)
     task.error_message = None
@@ -102,10 +103,17 @@ def run_research_task(session: Session, task: ResearchTask, provider: SearchProv
                     continue
                 leads.append(lead)
 
-        scored_results: list[ResearchResult] = []
+        scored_results_by_company: dict[int, ResearchResult] = {}
         for lead in leads:
             company = _upsert_company(session, lead)
             breakdown = score_lead(task, lead)
+            if company.id in scored_results_by_company:
+                result = scored_results_by_company[company.id]
+                if breakdown["total"] > result.relevance_score:
+                    result.relevance_score = breakdown["total"]
+                    result.scoring_breakdown = breakdown
+                    result.notes = lead.notes
+                continue
             existing_result = session.scalar(
                 select(ResearchResult).where(
                     ResearchResult.task_id == task.id,
@@ -125,10 +133,10 @@ def run_research_task(session: Session, task: ResearchTask, provider: SearchProv
                     notes=lead.notes,
                 )
                 session.add(result)
-            scored_results.append(result)
+            scored_results_by_company[company.id] = result
 
         session.flush()
-        ranked = sorted(scored_results, key=lambda item: item.relevance_score, reverse=True)
+        ranked = sorted(scored_results_by_company.values(), key=lambda item: item.relevance_score, reverse=True)
         for rank, result in enumerate(ranked, start=1):
             result.rank = rank
 
@@ -143,10 +151,13 @@ def run_research_task(session: Session, task: ResearchTask, provider: SearchProv
         log_task(session, task.id, "Research task completed", companies=len(ranked))
         return task
     except Exception as exc:
-        logger.exception("Research task failed", extra={"task_id": task.id})
-        task.status = TaskStatus.failed.value
-        task.error_message = str(exc)
-        task.locked_at = None
+        session.rollback()
+        logger.exception("Research task failed", extra={"task_id": task_id})
+        task = session.get(ResearchTask, task_id)
+        if task is not None:
+            task.status = TaskStatus.failed.value
+            task.error_message = str(exc)
+            task.locked_at = None
         session.commit()
-        log_task(session, task.id, "Research task failed", level="error", error=str(exc))
+        log_task(session, task_id, "Research task failed", level="error", error=str(exc))
         raise
