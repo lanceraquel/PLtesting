@@ -13,6 +13,7 @@ class ResearchTaskCreate(BaseModel):
     max_results: int = Field(default=25, ge=1, le=500)
     freshness_days: int | None = Field(default=None, ge=1)
     output_format: str = Field(default="markdown")
+    run_interval_minutes: int | None = Field(default=60, ge=15)
 
     @field_validator("si_keywords", "exclusion_keywords", "service_categories")
     @classmethod
@@ -26,6 +27,8 @@ class ResearchTaskRead(ResearchTaskCreate):
     search_queries: list[str]
     report_paths: dict[str, str]
     error_message: str | None
+    last_run_at: datetime | None
+    next_run_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -86,4 +89,3 @@ class ResearchResultRead(BaseModel):
 class HealthRead(BaseModel):
     status: str
     database: str
-

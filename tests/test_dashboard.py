@@ -11,3 +11,4 @@ def test_dashboard_renders():
     assert response.status_code == 200
     assert "SI Research Agent" in response.text
     assert "Create Research Task" in response.text
+    assert "Run interval" in response.text

@@ -1,12 +1,14 @@
 import csv
+from io import BytesIO
 import json
 from pathlib import Path
 
+from docx import Document
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
-from app.models import Company, ResearchResult, ResearchTask
+from app.models import Company, ReportArtifact, ResearchResult, ResearchTask
 
 
 def _result_rows(session: Session, task: ResearchTask) -> list[ResearchResult]:
@@ -40,6 +42,7 @@ def export_task_reports(session: Session, task: ResearchTask) -> dict[str, str]:
     _write_json(paths["json"], task, rows)
     _write_csv(paths["csv"], rows)
     _write_markdown(paths["markdown"], task, rows)
+    _store_docx(session, task, rows)
     return paths
 
 
@@ -172,3 +175,51 @@ def _serialize_result(row: ResearchResult) -> dict[str, object]:
         },
         "notes": row.notes,
     }
+
+
+def _store_docx(session: Session, task: ResearchTask, rows: list[ResearchResult]) -> None:
+    document = Document()
+    document.add_heading(f"SI Research Report - Task {task.id}", level=0)
+    document.add_paragraph(f"Target industry: {task.target_industry}")
+    document.add_paragraph(f"Target geography: {task.target_geography}")
+    document.add_paragraph(f"Service categories: {', '.join(task.service_categories) or 'Any'}")
+    document.add_paragraph(f"Maximum results: {task.max_results}")
+
+    document.add_heading("Search Queries Used", level=1)
+    for query in task.search_queries:
+        document.add_paragraph(query, style="List Bullet")
+
+    document.add_heading("Top-Ranked Systems Integrators", level=1)
+    table = document.add_table(rows=1, cols=6)
+    header = table.rows[0].cells
+    header[0].text = "Rank"
+    header[1].text = "Company"
+    header[2].text = "Score"
+    header[3].text = "Website"
+    header[4].text = "Services"
+    header[5].text = "Sources"
+    for row in rows:
+        company = row.company
+        cells = table.add_row().cells
+        cells[0].text = str(row.rank or "")
+        cells[1].text = company.name
+        cells[2].text = f"{row.relevance_score:.1f}"
+        cells[3].text = company.website or "Unknown"
+        cells[4].text = ", ".join(company.services) or "Unknown"
+        cells[5].text = "\n".join(source.source_url for source in company.sources) or "None"
+
+    document.add_heading("Caveats", level=1)
+    document.add_paragraph("Review low-confidence results before outreach.", style="List Bullet")
+    document.add_paragraph("Only public business contact information should be used.", style="List Bullet")
+    document.add_paragraph("Source URLs are included for auditability.", style="List Bullet")
+
+    buffer = BytesIO()
+    document.save(buffer)
+    artifact = ReportArtifact(
+        task_id=task.id,
+        format="docx",
+        filename=f"si-research-task-{task.id}.docx",
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        content=buffer.getvalue(),
+    )
+    session.add(artifact)

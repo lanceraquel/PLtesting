@@ -66,7 +66,7 @@ def _render_dashboard(
     total_tasks: int,
     completed_tasks: int,
 ) -> str:
-    task_rows = "\n".join(_task_row(task, selected_task_id) for task in tasks) or _empty_row("No tasks yet", 7)
+    task_rows = "\n".join(_task_row(task, selected_task_id) for task in tasks) or _empty_row("No tasks yet", 8)
     result_rows = "\n".join(_result_row(result) for result in results) or _empty_row("No results for this task yet", 7)
     company_rows = "\n".join(_company_row(company) for company in companies) or _empty_row("No companies discovered yet", 6)
     selected_task = next((task for task in tasks if task.id == selected_task_id), None)
@@ -74,6 +74,11 @@ def _render_dashboard(
         f"Task {selected_task.id}: {escape(selected_task.target_geography)} / {escape(selected_task.target_industry)}"
         if selected_task
         else "No task selected"
+    )
+    report_link = (
+        f"""<a href="/tasks/{selected_task.id}/reports/latest.docx">Download latest DOCX</a>"""
+        if selected_task and selected_task.status == "completed"
+        else "DOCX appears after a completed run"
     )
 
     return f"""<!doctype html>
@@ -196,6 +201,8 @@ def _render_dashboard(
             <textarea name="service_categories">ERP, CRM, cloud migration, cybersecurity, AI automation</textarea>
             <label>Maximum results</label>
             <input name="max_results" type="number" min="1" max="500" value="25">
+            <label>Run interval, minutes</label>
+            <input name="run_interval_minutes" type="number" min="15" value="60">
             <button type="submit">Create Task</button>
             <div id="form-message" class="message"></div>
           </form>
@@ -206,13 +213,13 @@ def _render_dashboard(
           <div class="toolbar"><h2>Tasks</h2><span class="subtle">Worker processes queued tasks automatically</span></div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>ID</th><th>Status</th><th>Geography</th><th>Industry</th><th>Max</th><th>Created</th><th>Action</th></tr></thead>
+              <thead><tr><th>ID</th><th>Status</th><th>Geography</th><th>Industry</th><th>Max</th><th>Interval</th><th>Next Run</th><th>Action</th></tr></thead>
               <tbody>{task_rows}</tbody>
             </table>
           </div>
         </section>
         <section>
-          <div class="toolbar"><h2>Results</h2><span class="subtle">{selected_summary}</span></div>
+          <div class="toolbar"><h2>Results</h2><span class="subtle">{selected_summary} · {report_link}</span></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Rank</th><th>Company</th><th>Score</th><th>Website</th><th>Services</th><th>Sources</th><th>Notes</th></tr></thead>
@@ -246,6 +253,7 @@ def _render_dashboard(
         company_size_preference: form.get("company_size_preference"),
         service_categories: splitList(form.get("service_categories") || ""),
         max_results: Number(form.get("max_results") || 25),
+        run_interval_minutes: Number(form.get("run_interval_minutes") || 60),
         output_format: "markdown"
       }};
       message.textContent = "Creating task...";
@@ -279,7 +287,8 @@ def _task_row(task: ResearchTask, selected_task_id: int | None) -> str:
       <td>{escape(task.target_geography)}</td>
       <td>{escape(task.target_industry)}</td>
       <td>{task.max_results}</td>
-      <td>{escape(str(task.created_at))}</td>
+      <td>{task.run_interval_minutes or "Manual"} min</td>
+      <td>{escape(str(task.next_run_at or "Queued"))}</td>
       <td><button class="secondary" onclick="rerunTask({task.id})">Run</button></td>
     </tr>"""
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -34,16 +34,20 @@ class ResearchTask(Base):
     max_results: Mapped[int] = mapped_column(Integer, default=25)
     freshness_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     output_format: Mapped[str] = mapped_column(String(32), default="markdown")
+    run_interval_minutes: Mapped[int | None] = mapped_column(Integer, default=60, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=TaskStatus.queued.value, index=True)
     search_queries: Mapped[list[str]] = mapped_column(MutableList.as_mutable(json_type()), default=list)
     report_paths: Mapped[dict[str, str]] = mapped_column(MutableDict.as_mutable(json_type()), default=dict)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     results: Mapped[list["ResearchResult"]] = relationship(back_populates="task", cascade="all, delete-orphan")
     logs: Mapped[list["RunLog"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+    report_artifacts: Mapped[list["ReportArtifact"]] = relationship(back_populates="task", cascade="all, delete-orphan")
 
 
 class Company(Base):
@@ -129,3 +133,17 @@ class RunLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     task: Mapped[ResearchTask] = relationship(back_populates="logs")
+
+
+class ReportArtifact(Base):
+    __tablename__ = "report_artifacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("research_tasks.id", ondelete="CASCADE"), index=True)
+    format: Mapped[str] = mapped_column(String(32), default="docx", index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(120))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    task: Mapped[ResearchTask] = relationship(back_populates="report_artifacts")

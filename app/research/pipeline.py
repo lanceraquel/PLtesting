@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -132,8 +132,11 @@ def run_research_task(session: Session, task: ResearchTask, provider: SearchProv
         for rank, result in enumerate(ranked, start=1):
             result.rank = rank
 
+        now = datetime.now(UTC)
         task.status = TaskStatus.completed.value
         task.locked_at = None
+        task.last_run_at = now
+        task.next_run_at = now + timedelta(minutes=task.run_interval_minutes) if task.run_interval_minutes else None
         session.commit()
         task.report_paths = export_task_reports(session, task)
         session.commit()
@@ -147,4 +150,3 @@ def run_research_task(session: Session, task: ResearchTask, provider: SearchProv
         session.commit()
         log_task(session, task.id, "Research task failed", level="error", error=str(exc))
         raise
-

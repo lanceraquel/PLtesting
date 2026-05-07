@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_session
-from app.models import Company, ResearchResult, ResearchTask, TaskStatus
+from app.models import Company, ReportArtifact, ResearchResult, ResearchTask, TaskStatus
 from app.reports.exporter import export_task_reports
 from app.schemas import ResearchResultRead, ResearchTaskCreate, ResearchTaskRead
 
@@ -71,3 +71,22 @@ def generate_reports(task_id: int, session: Session = Depends(get_session)) -> d
     task.report_paths = report_paths
     session.commit()
     return report_paths
+
+
+@router.get("/{task_id}/reports/latest.docx")
+def download_latest_docx_report(task_id: int, session: Session = Depends(get_session)) -> Response:
+    if session.get(ResearchTask, task_id) is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    artifact = session.scalar(
+        select(ReportArtifact)
+        .where(ReportArtifact.task_id == task_id, ReportArtifact.format == "docx")
+        .order_by(ReportArtifact.created_at.desc())
+        .limit(1)
+    )
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="No DOCX report has been generated for this task yet")
+    return Response(
+        content=artifact.content,
+        media_type=artifact.content_type,
+        headers={"Content-Disposition": f'attachment; filename="{artifact.filename}"'},
+    )

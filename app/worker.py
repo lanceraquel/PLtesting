@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def claim_next_task(stale_after_minutes: int = 30) -> ResearchTask | None:
+    now = datetime.now(UTC)
     stale_before = datetime.now(UTC) - timedelta(minutes=stale_after_minutes)
     with SessionLocal() as session:
         stmt = (
@@ -21,8 +22,9 @@ def claim_next_task(stale_after_minutes: int = 30) -> ResearchTask | None:
             .where(
                 (ResearchTask.status == TaskStatus.queued.value)
                 | ((ResearchTask.status == TaskStatus.running.value) & (ResearchTask.locked_at < stale_before))
+                | ((ResearchTask.status == TaskStatus.completed.value) & (ResearchTask.next_run_at <= now))
             )
-            .order_by(ResearchTask.created_at.asc())
+            .order_by(ResearchTask.next_run_at.asc().nullsfirst(), ResearchTask.created_at.asc())
             .limit(1)
         )
         task = session.scalar(stmt)
@@ -60,4 +62,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

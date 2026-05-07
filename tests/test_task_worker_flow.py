@@ -29,3 +29,7 @@ def test_task_can_be_created_and_processed():
     assert len(results) > 0
     assert results[0]["scoring_breakdown"]["total"] == results[0]["relevance_score"]
 
+    report_response = client.get(f"/tasks/{task_id}/reports/latest.docx")
+    assert report_response.status_code == 200
+    assert report_response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    assert report_response.content.startswith(b"PK")
