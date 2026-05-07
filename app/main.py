@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes_companies import router as companies_router
+from app.api.routes_dashboard import router as dashboard_router
 from app.api.routes_health import router as health_router
 from app.api.routes_tasks import router as tasks_router
 from app.database import init_db
@@ -39,5 +40,6 @@ def on_startup() -> None:
     init_db()
  
 app.include_router(health_router)
+app.include_router(dashboard_router)
 app.include_router(tasks_router)
 app.include_router(companies_router)
